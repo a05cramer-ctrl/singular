@@ -1,1 +1,1 @@
-window.SINGULAR_CFG={"NAME":"SINGULAR","TICKER":"SINGULAR","CA":"","CHAIN":"solana","PAD":"pump.fun","PAIR":"","X":"","BUY":"","CHART":"","API":"/api/state"};
+window.SINGULAR_CFG={"NAME":"SINGULAR","TICKER":"SINGULAR","CA":"8wnArrRfZBW7dRyxkHe6jPuC5L5BruKPnqQrcxKDpump","CHAIN":"solana","PAD":"pump.fun","PAIR":"","X":"https://x.com/singular__ai","BUY":"","CHART":"","API":"/api/state"};
