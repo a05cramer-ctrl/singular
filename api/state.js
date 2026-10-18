@@ -432,6 +432,46 @@ export async function think({ tier, mcap, recent, levelUp, now = Date.now() }) {
   };
 }
 
+// ---------- live feed (no AI): factual digest of real pump.fun / Jupiter data ----------
+const FEED_MS = 2 * 60 * 1000;
+const feedMem = { at: 0, t: null };
+function ago(min) {
+  if (min == null) return "";
+  return min < 1 ? "just now" : min < 60 ? `${min}m ago` : `${Math.round(min / 60)}h ago`;
+}
+export async function liveFeed(now = Date.now()) {
+  if (feedMem.t && now - feedMem.at < FEED_MS) return feedMem.t;
+  const [launches, trending] = await Promise.all([getLaunches(now), getTrending()]);
+  const parts = [];
+  if (launches.length) {
+    const ages = launches.map((c) => c.ageMin).filter((n) => n != null);
+    const span = ages.length ? Math.max(...ages) : null;
+    parts.push(`${launches.length} new pump.fun launches${span != null ? ` in the last ${Math.max(1, span)} minutes` : ""}.`);
+    const big = launches.filter((c) => c.mcap != null).sort((a, b) => b.mcap - a.mcap)[0];
+    if (big) parts.push(`Biggest of them: $${big.symbol} at ${usd(big.mcap)}${big.ageMin != null ? `, launched ${ago(big.ageMin)}` : ""}.`);
+    const newest = launches.slice(0, 3).map((c) => "$" + c.symbol);
+    if (newest.length) parts.push(`Newest: ${newest.join(", ")}.`);
+  }
+  if (trending.length) {
+    const top = trending.slice(0, 3).map((c) => `$${c.symbol}${c.change1h != null ? ` ${c.change1h >= 0 ? "+" : ""}${c.change1h.toFixed(0)}%` : ""}`);
+    parts.push(`Trending on Jupiter this hour: ${top.join(", ")}.`);
+  }
+  if (!parts.length) return feedMem.t; // nothing reachable: keep last real digest (or none)
+  const read = [];
+  for (const c of [...launches, ...trending]) if (c.symbol && !read.includes(c.symbol) && read.length < 24) read.push(c.symbol);
+  const t = {
+    text: "Live feed, AI paused. " + parts.join(" "),
+    model: "live feed",
+    tier: 0,
+    at: now,
+    feed: true,
+    inputs: { launches: launches.length, trending: trending.length, searched: false, read },
+  };
+  feedMem.at = now;
+  feedMem.t = t;
+  return t;
+}
+
 // ---------- state ----------
 let inflight = null;
 
@@ -484,6 +524,22 @@ export async function getState(now = Date.now()) {
     }
   }
 
+  let feedMode = false;
+  if (!thought) {
+    try {
+      const f = await liveFeed(now);
+      if (f) {
+        thought = f;
+        history = [f];
+        status = "live";
+        reason = "feed";
+        feedMode = true;
+      }
+    } catch (e) {
+      console.error("[singular] feed:", e.message);
+    }
+  }
+
   const cur = T[highest];
   const next = T[highest + 1] || null;
   let progress = null;
@@ -496,14 +552,14 @@ export async function getState(now = Date.now()) {
     tier: highest,
     highestTier: highest,
     mcapTier,
-    model: cur.model,
+    model: feedMode ? "live feed (AI paused)" : cur.model,
     tools: cur.tools.slice(),
     mcap,
     nextTier: next ? { tier: next.tier, at: next.at, model: next.model } : null,
     progress,
     thought: thought || null,
     history: thought ? history.slice(0, CONFIG.historySize) : [],
-    intervalMs: CONFIG.intervalMs,
+    intervalMs: feedMode ? FEED_MS : CONFIG.intervalMs,
     ladder: T.map((t) => ({ tier: t.tier, at: t.at, model: t.model, label: t.label, tools: t.tools.map((id) => ({ id, label: CONFIG.toolLabels[id] })) })),
     now,
   };
